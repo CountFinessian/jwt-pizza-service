@@ -140,7 +140,7 @@ test('update user unauthorized', async () => {
   const userToken = loginRes.body.token;
   const updatedCreds = { email: 'a@jwt.com', password: 'admin' };
   const updateUser = await request(app).put('/api/auth/15').set('Authorization', `Bearer ${userToken}`).send(updatedCreds);
-  expect(updateUser.status).toBe(401);
+  expect(updateUser.status).toBe(403);
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
