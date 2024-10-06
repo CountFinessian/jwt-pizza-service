@@ -100,7 +100,22 @@ test('get an order', async () => {
   const userToken = loginRes.body.token;
   const orderRes = await request(app).get('/api/order').set('Authorization', `Bearer ${userToken}`);
   expect(orderRes.status).toBe(200);
-  expect(orderRes.body.orders).toEqual([]);
+  expect(orderRes.body.orders).toEqual([
+        {
+         "date": "2024-10-06T23:26:29.000Z",
+      "franchiseId": 1,
+         "id": 1,
+        "items": [
+     {
+            "description": "Veggie",
+             "id": 1,
+             "menuId": 1,
+             "price": 0.0038,
+          },
+         ],
+        "storeId": 1,
+    },
+    ]);
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
@@ -131,7 +146,7 @@ test('update user', async () => {
 test('update user unauthorized', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
   const userToken = loginRes.body.token;
-  const updatedCreds = { email: 'fefed.com', password: 'sfssc' };
+  const updatedCreds = { email: 'a@jwt.com', password: 'admin' };
   const updateUser = await request(app).put('/api/auth/15').set('Authorization', `Bearer ${userToken}`).send(updatedCreds);
   expect(updateUser.status).toBe(403);
   expect(updateUser.body.message).toBe('unauthorized');
@@ -150,6 +165,20 @@ test('create a users franchise', async () => {
   const addFranchise = await request(app).post('/api/franchise').set('Authorization', `Bearer ${adminToken}`).send(newFranchise);
   expect(addFranchise.status).toBe(200);
   expect(addFranchise.body.name).toEqual(randomFranchiseName);
+});
+
+test('create a users franchise unkown email', async () => {
+  const adminUser = await createAdminUser();
+  const loginRes = await request(app).put('/api/auth').send(adminUser);
+  const adminToken = loginRes.body.token;
+  const randomFranchiseName = randomName();
+  const newFranchise = {
+    name: randomFranchiseName,
+    admins: [{ email: 'randomfranchise@jwtSecret.com' }],
+  };
+  const addFranchise = await request(app).post('/api/franchise').set('Authorization', `Bearer ${adminToken}`).send(newFranchise);
+  expect(addFranchise.status).toBe(404);
+  expect(addFranchise.body.message).toEqual('unknown user for franchise admin randomfranchise@jwtSecret.com provided');
 });
 
 test('get franchise', async () => {
