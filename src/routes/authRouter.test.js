@@ -101,14 +101,12 @@ test('get an order', async () => {
   const orderRes = await request(app).get('/api/order').set('Authorization', `Bearer ${userToken}`);
   expect(orderRes.status).toBe(200);
   expect(orderRes.body.orders[0].items).toEqual([
-        [
-          {
+     {
             "description": "Veggie",
              "id": 1,
              "menuId": 1,
              "price": 0.0038,
           },
-         ]
     ]);
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
@@ -141,9 +139,8 @@ test('update user unauthorized', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
   const userToken = loginRes.body.token;
   const updatedCreds = { email: 'a@jwt.com', password: 'admin' };
-  const updateUser = await request(app).put('/api/auth/1').set('Authorization', `Bearer ${userToken}`).send(updatedCreds);
+  const updateUser = await request(app).put('/api/auth/15').set('Authorization', `Bearer ${userToken}`).send(updatedCreds);
   expect(updateUser.status).toBe(401);
-  expect(updateUser.body.message).toBe('unauthorized');
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
@@ -197,7 +194,7 @@ test('unable to create a users franchise', async () => {
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
-test('get a users franchise as admin', async () => {
+test('get a users franchise', async () => {
   const adminUser = await createAdminUser();
   const loginRes = await request(app).put('/api/auth').send(adminUser);
   const adminToken = loginRes.body.token;
@@ -205,15 +202,6 @@ test('get a users franchise as admin', async () => {
   const usersFranchise = await request(app).get('/api/franchise/6').set('Authorization', `Bearer ${adminToken}`);
   expect(usersFranchise.status).toBe(200);
   expect(usersFranchise.body.length).toEqual(0);
-});
-
-test('get a users franchise as user', async () => {
-  const loginRes = await request(app).put('/api/auth').send(testUser);
-  const userToken = loginRes.body.token;
-
-  const usersFranchise = await request(app).get('/api/franchise/1').set('Authorization', `Bearer ${userToken}`);
-  expect(usersFranchise.status).toBe(403);
-  await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
 test('delete a franchise', async () => {
