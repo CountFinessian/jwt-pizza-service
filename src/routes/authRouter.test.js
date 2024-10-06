@@ -213,6 +213,7 @@ test('get a users franchise as user', async () => {
 
   const usersFranchise = await request(app).get('/api/franchise/1').set('Authorization', `Bearer ${userToken}`);
   expect(usersFranchise.status).toBe(403);
+  await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
 test('delete a franchise', async () => {
