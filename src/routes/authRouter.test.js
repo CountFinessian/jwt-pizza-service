@@ -85,14 +85,6 @@ test('add menu item rejection', async () => {
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
-test('get an order', async () => {
-  const loginRes = await request(app).put('/api/auth').send(testUser);
-  const userToken = loginRes.body.token;
-  const orderRes = await request(app).get('/api/order').set('Authorization', `Bearer ${userToken}`);
-  expect(orderRes.status).toBe(200);
-  expect(orderRes.body.orders).toEqual([]);
-  await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
-});
 
 test('make an order', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
@@ -100,6 +92,15 @@ test('make an order', async () => {
   const newOrder = { franchiseId: 1, storeId: 1, items: [{ menuId: 1, description: 'Veggie', price: 0.0038 }] };
   const newOrderRes = await request(app).post('/api/order').set('Authorization', `Bearer ${userToken}`).send(newOrder);
   expect(newOrderRes.status).toBe(200);
+  await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
+});
+
+test('get an order', async () => {
+  const loginRes = await request(app).put('/api/auth').send(testUser);
+  const userToken = loginRes.body.token;
+  const orderRes = await request(app).get('/api/order').set('Authorization', `Bearer ${userToken}`);
+  expect(orderRes.status).toBe(200);
+  expect(orderRes.body.orders).toEqual([]);
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
