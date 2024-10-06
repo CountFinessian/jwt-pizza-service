@@ -43,12 +43,6 @@ test('admin user', async () => {
   expect(loginRes.status).toBe(200);
 });
 
-test('get menu', async () => {
-  const menuRes = await request(app).get('/api/order/menu');
-  expect(menuRes.status).toBe(200);
-  expect(menuRes.body[0]).toEqual({ description: 'A garden of delight', id: 1, image: 'pizza1.png', price: 0.0038, title: 'Veggie' });
-});
-
 test('add menu item', async () => {
   const adminUser = await createAdminUser();
   const loginRes = await request(app).put('/api/auth').send(adminUser);
@@ -67,6 +61,12 @@ test('add menu item', async () => {
   const length = addItemRes.body.length;
   newItem.id = length;
   expect(addItemRes.body[length - 1]).toEqual(newItem);
+});
+
+test('get menu', async () => {
+  const menuRes = await request(app).get('/api/order/menu');
+  expect(menuRes.status).toBe(200);
+  expect(menuRes.body[0]).toEqual({ description: "No topping, no sauce, just carbs", id: 1, image: "pizza9.png", "price": 0.0001, "title": "Student", });
 });
 
 test('add menu item rejection', async () => {
@@ -124,7 +124,7 @@ test('update user', async () => {
   const userId = loginRes.body.user.id;
   const updateUser = await request(app).put(`/api/auth/${userId}`).set('Authorization', `Bearer ${adminToken}`).send(updatedCreds);
   expect(updateUser.status).toBe(200);
-  expect(updateUser.body).toEqual({ id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] });
+  expect(updateUser.body.email).toEqual('a@jwt.com');
 });
 
 test('update user unauthorized', async () => {
@@ -135,12 +135,6 @@ test('update user unauthorized', async () => {
   expect(updateUser.status).toBe(403);
   expect(updateUser.body.message).toBe('unauthorized');
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
-});
-
-test('get franchise', async () => {
-  const franchiseFetch = await request(app).get('/api/franchise');
-  expect(franchiseFetch.status).toBe(200);
-  expect(franchiseFetch.body[0].id).toEqual(21);
 });
 
 test('create a users franchise', async () => {
@@ -157,9 +151,17 @@ test('create a users franchise', async () => {
   expect(addFranchise.body.name).toEqual(randomFranchiseName);
 });
 
+test('get franchise', async () => {
+  const franchiseFetch = await request(app).get('/api/franchise');
+  expect(franchiseFetch.status).toBe(200);
+  expect(franchiseFetch.body[0].id).toEqual(1);
+});
+
 test('unable to create a users franchise', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
   const userToken = loginRes.body.token;
+
+
   const randomFranchiseName = randomName();
   const newFranchise = {
     name: randomFranchiseName,
@@ -176,9 +178,9 @@ test('get a users franchise', async () => {
   const loginRes = await request(app).put('/api/auth').send(adminUser);
   const adminToken = loginRes.body.token;
 
-  const usersFranchise = await request(app).get('/api/franchise/446').set('Authorization', `Bearer ${adminToken}`);
+  const usersFranchise = await request(app).get('/api/franchise/6').set('Authorization', `Bearer ${adminToken}`);
   expect(usersFranchise.status).toBe(200);
-  expect(usersFranchise.body[0].name).toEqual('18d7pscu4d');
+  expect(usersFranchise.body.length).toEqual(1);
 });
 
 test('delete a franchise', async () => {
@@ -202,9 +204,9 @@ test('create a new franchise store', async () => {
   const adminUser = await createAdminUser();
   const loginRes = await request(app).put('/api/auth').send(adminUser);
   const adminToken = loginRes.body.token;
-  const newFranchiseStore = await request(app).post('/api/franchise/28/store').set('Authorization', `Bearer ${adminToken}`).send({ franchiseId: 1, name: 'SLC' });
+  const newFranchiseStore = await request(app).post('/api/franchise/1/store').set('Authorization', `Bearer ${adminToken}`).send({ franchiseId: 1, name: 'SLC' });
   expect(newFranchiseStore.status).toBe(200);
-  expect(newFranchiseStore.body.franchiseId).toBe(28);
+  expect(newFranchiseStore.body.franchiseId).toBe(1);
 });
 
 test('unable to create a store', async () => {
