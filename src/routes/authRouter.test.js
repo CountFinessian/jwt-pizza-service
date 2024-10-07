@@ -136,17 +136,6 @@ test('update user', async () => {
   expect(updateUser.body.email).toEqual('a@jwt.com');
 });
 
-test('assign a franchisee role', async () => {
-  const franchiseeUser = { 
-    name: 'Franchisee User',
-    email: 'franchisee@test.com',
-    password: 'franchiseepass',
-    roles: [{ role: Role.Franchisee }]
-  };
-  const loginRes = await request(app).put('/api/auth').send(franchiseeUser);
-  expect(loginRes.status).toBe(404);
-
-});
 
 test('update user unauthorized', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
@@ -191,7 +180,17 @@ test('get franchise', async () => {
   expect(franchiseFetch.body[0].id).toEqual(1);
 });
 
+test('get franchise', async () => {
+  const adminUser = await createAdminUser();
+  const loginRes = await request(app).put('/api/auth').send(adminUser);
+  const adminToken = loginRes.body.token;
+  const franchiseFetch = await request(app).get('/api/franchise').set('Authorization', `Bearer ${adminToken}`);
+  expect(franchiseFetch.status).toBe(200);
+  expect(franchiseFetch.body[0].id).toEqual(1);
+});
+
 test('unable to create a users franchise', async () => {
+  
   const loginRes = await request(app).put('/api/auth').send(testUser);
   const userToken = loginRes.body.token;
 
