@@ -265,17 +265,20 @@ test('unable to delete a store', async () => {
 test('database test', async () => {
   const mockMenuItems = [{ id: 1, title: 'Item 1' }, { id: 2, title: 'Item 2' }];
   const franchiseId = 1;
-    mockConnection = {
-      execute: jest.fn(),
-      end: jest.fn(),
-      beginTransaction: jest.fn(),
-      commit: jest.fn(),
-      rollback: jest.fn(),
-    };
-    mockQuery = jest.fn();
-    DB.getConnection = jest.fn().mockResolvedValue(mockConnection);
-    DB.query = mockQuery;
   
+  const mockConnection = {
+    execute: jest.fn(),
+    end: jest.fn(),
+    beginTransaction: jest.fn(),
+    commit: jest.fn(),
+    rollback: jest.fn(),
+  };
+  
+  const mockQuery = jest.fn();
+  
+  DB.getConnection = jest.fn().mockResolvedValue(mockConnection);
+  DB.query = mockQuery;
+
   await DB.deleteFranchise(franchiseId);
   expect(mockQuery).toHaveBeenCalledWith(mockConnection, 'DELETE FROM store WHERE franchiseId=?', [franchiseId]);
   expect(mockQuery).toHaveBeenCalledWith(mockConnection, 'DELETE FROM userRole WHERE objectId=?', [franchiseId]);
