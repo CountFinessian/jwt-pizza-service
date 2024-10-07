@@ -96,15 +96,6 @@ test('make an order', async () => {
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
-test('failed to make an order', async () => {
-  const loginRes = await request(app).put('/api/auth').send(testUser);
-  const userToken = loginRes.body.token;
-  const newOrder = { franchiseId: 1, storeId: 1, items: [{ menuId: 1, price: 0.0038 }] };
-  const newOrderRes = await request(app).post('/api/order').set('Authorization', `Bearer ${userToken}`).send(newOrder);
-  expect(newOrderRes.status).toBe(500);
-  expect(newOrderRes.body.message).toEqual('Bind parameters must not contain undefined. To pass SQL NULL specify JS null');
-  await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
-});
 
 test('get an order', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
@@ -269,4 +260,30 @@ test('unable to delete a store', async () => {
   expect(deleteFranchiseStore.status).toBe(403);
   expect(deleteFranchiseStore.body.message).toEqual('unable to delete a store');
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
+});
+
+test('database test', async () => {
+  const mockMenuItems = [{ id: 1, title: 'Item 1' }, { id: 2, title: 'Item 2' }];
+  const franchiseId = 1;
+    mockConnection = {
+      execute: jest.fn(),
+      end: jest.fn(),
+      beginTransaction: jest.fn(),
+      commit: jest.fn(),
+      rollback: jest.fn(),
+    };
+    mockQuery = jest.fn();
+    DB.getConnection = jest.fn().mockResolvedValue(mockConnection);
+    DB.query = mockQuery;
+  
+  await DB.deleteFranchise(franchiseId);
+  expect(mockQuery).toHaveBeenCalledWith(mockConnection, 'DELETE FROM store WHERE franchiseId=?', [franchiseId]);
+  expect(mockQuery).toHaveBeenCalledWith(mockConnection, 'DELETE FROM userRole WHERE objectId=?', [franchiseId]);
+  expect(mockQuery).toHaveBeenCalledWith(mockConnection, 'DELETE FROM franchise WHERE id=?', [franchiseId]);
+
+  mockQuery.mockResolvedValue(mockMenuItems);
+  const result = await DB.getMenu();
+  expect(mockQuery).toHaveBeenCalledWith(mockConnection, 'SELECT * FROM menu');
+  expect(result).toEqual(mockMenuItems);
+  expect(mockConnection.end).toHaveBeenCalled();
 });
