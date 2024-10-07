@@ -96,6 +96,15 @@ test('make an order', async () => {
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
+test('make an order', async () => {
+  const loginRes = await request(app).put('/api/auth').send(testUser);
+  const userToken = loginRes.body.token;
+  const newOrder = { franchiseId: 1, storeId: 1, items: [{ menuId: 1, price: 0.0038 }] };
+  const newOrderRes = await request(app).post('/api/order').set('Authorization', `Bearer ${userToken}`).send(newOrder);
+  expect(newOrderRes.status).toBe(500);
+  expect(newOrderRes.body.message).toEqual('Failed to fulfill order at factory');
+});
+
 test('get an order', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
   const userToken = loginRes.body.token;
@@ -180,14 +189,6 @@ test('get franchise', async () => {
   expect(franchiseFetch.body[0].id).toEqual(1);
 });
 
-test('get franchise', async () => {
-  const adminUser = await createAdminUser();
-  const loginRes = await request(app).put('/api/auth').send(adminUser);
-  const adminToken = loginRes.body.token;
-  const franchiseFetch = await request(app).get('/api/franchise').set('Authorization', `Bearer ${adminToken}`);
-  expect(franchiseFetch.status).toBe(200);
-  expect(franchiseFetch.body[0].id).toEqual(1);
-});
 
 test('unable to create a users franchise', async () => {
   
