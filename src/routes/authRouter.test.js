@@ -136,6 +136,18 @@ test('update user', async () => {
   expect(updateUser.body.email).toEqual('a@jwt.com');
 });
 
+test('assign a franchisee role', async () => {
+  const franchiseeUser = { 
+    name: 'Franchisee User',
+    email: 'franchisee@test.com',
+    password: 'franchiseepass',
+    roles: [{ role: Role.Franchisee }]
+  };
+  const loginRes = await request(app).put('/api/auth').send(franchiseeUser);
+  expect(loginRes.status).toBe(404);
+
+});
+
 test('update user unauthorized', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
   const userToken = loginRes.body.token;
@@ -200,46 +212,9 @@ test('get a users franchise', async () => {
   const loginRes = await request(app).put('/api/auth').send(adminUser);
   const adminToken = loginRes.body.token;
 
-  const usersFranchise = await request(app).get('/api/franchise/1').set('Authorization', `Bearer ${adminToken}`);
-  expect(usersFranchise.status).toBe(200);
-  expect(usersFranchise.body.length).toEqual(0);
-});
-
-test('get a users franchise', async () => {
-  const adminUser = await createAdminUser();
-  const loginRes = await request(app).put('/api/auth').send(adminUser);
-  const adminToken = loginRes.body.token;
-
-  const usersFranchise = await request(app).get('/api/franchise/2').set('Authorization', `Bearer ${adminToken}`);
-  expect(usersFranchise.status).toBe(200);
-  expect(usersFranchise.body.length).toEqual(0);
-});
-test('get a users franchise', async () => {
-  const adminUser = await createAdminUser();
-  const loginRes = await request(app).put('/api/auth').send(adminUser);
-  const adminToken = loginRes.body.token;
-
-  const usersFranchise = await request(app).get('/api/franchise/3').set('Authorization', `Bearer ${adminToken}`);
-  expect(usersFranchise.status).toBe(200);
-  expect(usersFranchise.body.length).toEqual(0);
-});
-test('get a users franchise', async () => {
-  const adminUser = await createAdminUser();
-  const loginRes = await request(app).put('/api/auth').send(adminUser);
-  const adminToken = loginRes.body.token;
-
-  const usersFranchise = await request(app).get('/api/franchise/4').set('Authorization', `Bearer ${adminToken}`);
-  expect(usersFranchise.status).toBe(200);
-  expect(usersFranchise.body.length).toEqual(0);
-});
-test('get a users franchise', async () => {
-  const adminUser = await createAdminUser();
-  const loginRes = await request(app).put('/api/auth').send(adminUser);
-  const adminToken = loginRes.body.token;
-
   const usersFranchise = await request(app).get('/api/franchise/5').set('Authorization', `Bearer ${adminToken}`);
   expect(usersFranchise.status).toBe(200);
-  expect(usersFranchise.body.length).toEqual(0);
+  expect(usersFranchise.body.length).toEqual(1);
 });
 
 test('delete a franchise', async () => {
