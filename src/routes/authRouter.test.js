@@ -96,6 +96,15 @@ test('make an order', async () => {
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
+test('failed to make an order', async () => {
+  const loginRes = await request(app).put('/api/auth').send(testUser);
+  const userToken = loginRes.body.token;
+  const newOrder = { franchiseId: 1, storeId: 1, items: [{ menuId: 1, price: 0.0038 }] };
+  const newOrderRes = await request(app).post('/api/order').set('Authorization', `Bearer ${userToken}`).send(newOrder);
+  expect(newOrderRes.status).toBe(500);
+  expect(newOrderRes.body.message).toEqual('Bind parameters must not contain undefined. To pass SQL NULL specify JS null');
+  await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
+});
 
 test('get an order', async () => {
   const loginRes = await request(app).put('/api/auth').send(testUser);
@@ -262,3 +271,36 @@ test('unable to delete a store', async () => {
   await request(app).delete('/api/auth').set('Authorization', `Bearer ${userToken}`);
 });
 
+test('get orders through route', async () => {
+  const loginRes = await request(app).put('/api/auth').send(testUser);
+  const userToken = loginRes.body.token;
+
+  const ordersRes = await request(app).get('/api/order').set('Authorization', `Bearer ${userToken}`);
+  expect(ordersRes.status).toBe(200);
+  expect(ordersRes.body).toHaveProperty('orders');
+});
+
+test('create franchise through route', async () => {
+  const adminUser = await createAdminUser();
+  const loginRes = await request(app).put('/api/auth').send(adminUser);
+  const adminToken = loginRes.body.token;
+
+  const franchise = {
+    name: 'New Franchise',
+    admins: [{ email: adminUser.email }],
+  };
+
+  const createFranchiseRes = await request(app).post('/api/franchise').set('Authorization', `Bearer ${adminToken}`).send(franchise);
+  expect(createFranchiseRes.status).toBe(200);
+  expect(createFranchiseRes.body).toHaveProperty('id');
+});
+
+test('delete franchise through route', async () => {
+  const adminUser = await createAdminUser();
+  const loginRes = await request(app).put('/api/auth').send(adminUser);
+  const adminToken = loginRes.body.token;
+
+  const deleteFranchiseRes = await request(app).delete('/api/franchise/1').set('Authorization', `Bearer ${adminToken}`);
+  expect(deleteFranchiseRes.status).toBe(200);
+  expect(deleteFranchiseRes.body.message).toEqual('franchise deleted');
+});
