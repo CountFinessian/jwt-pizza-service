@@ -11,7 +11,7 @@ franchiseRouter.endpoints = [
     path: '/api/franchise',
     description: 'List all the franchises',
     example: `curl localhost:3000/api/franchise`,
-    response: [{ id: 1, name: 'pizzaPocket', stores: [{ id: 1, name: 'SLC' }] }],
+    response: [{ id: 1, name: 'pizzaPocket', admins: [{ id: 4, name: 'pizza franchisee', email: 'f@jwt.com' }], stores: [{ id: 1, name: 'SLC', totalRevenue: 0 }] }],
   },
   {
     method: 'GET',
@@ -43,7 +43,7 @@ franchiseRouter.endpoints = [
     requiresAuth: true,
     description: 'Create a new franchise store',
     example: `curl -X POST localhost:3000/api/franchise/1/store -H 'Content-Type: application/json' -d '{"franchiseId": 1, "name":"SLC"}' -H 'Authorization: Bearer tttttt'`,
-    response: { id: 1, franchiseId: 1, name: 'SLC' },
+    response: { id: 1, name: 'SLC', totalRevenue: 0 },
   },
   {
     method: 'DELETE',
