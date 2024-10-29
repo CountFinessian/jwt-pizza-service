@@ -44,7 +44,7 @@ jobs:
         run: |
           echo "module.exports = {
             jwtSecret: '${{ secrets.JWT_SECRET }}',
-            db: {
+            db: { 
               connection: {
                 host: '127.0.0.1',
                 user: 'root',
