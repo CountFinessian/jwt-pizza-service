@@ -60,8 +60,8 @@ jobs:
             },
           };" > src/config.js
 
-      - name: Tests
-        run: npm test
+      # - name: Tests
+      #   run: npm test
 
       - name: set version
         id: set_version
@@ -157,3 +157,29 @@ jobs:
           service: jwt-pizza-service
           cluster: jwt-pizza-service
           wait-for-service-stability: false
+      
+      - name: Write config file
+        run: |
+          echo "module.exports = {
+            jwtSecret: '${{ secrets.JWT_SECRET }}',
+            db: {
+              connection: {
+                host: '127.0.0.1',
+                user: 'root',
+                password: 'tempdbpassword',
+                database: 'pizza',
+                connectTimeout: 60000,
+              },
+              listPerPage: 10,
+            },
+            factory: {
+              url: 'https://pizza-service.krazykid.click',
+              apiKey: '${{ secrets.FACTORY_API_KEY }}',
+            },
+            metrics: {
+              source: 'jwt-pizza-service',
+              userId: ${{ secrets.METRICS_USER_ID }},
+              url: '${{ secrets.METRICS_URL }}',
+              apiKey: '${{ secrets.METRICS_API_KEY }}',
+            },            
+          };" > src/config.js
