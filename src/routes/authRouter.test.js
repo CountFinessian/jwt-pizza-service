@@ -26,6 +26,7 @@ if (process.env.VSCODE_INSPECTOR_OPTIONS) {
 beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
   await request(app).post('/api/auth').send(testUser);
+  
 });
 
 
