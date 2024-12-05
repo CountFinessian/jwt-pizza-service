@@ -3,6 +3,7 @@ const config = require('../config.js');
 const { Role, DB } = require('../database/database.js');
 const { authRouter } = require('./authRouter.js');
 const { asyncHandler, StatusCodeError } = require('../endpointHelper.js');
+const metrics = require('../metrics.js');
 
 const orderRouter = express.Router();
 
@@ -77,18 +78,28 @@ orderRouter.post(
   '/',
   authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
+    const start = Date.now();
     const orderReq = req.body;
-    const order = await DB.addDinerOrder(req.user, orderReq);
-    const r = await fetch(`${config.factory.url}/api/order`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${config.factory.apiKey}` },
-      body: JSON.stringify({ diner: { id: req.user.id, name: req.user.name, email: req.user.email }, order }),
-    });
-    const j = await r.json();
-    if (r.ok) {
-      res.send({ order, jwt: j.jwt, reportUrl: j.reportUrl });
-    } else {
-      res.status(500).send({ message: 'Failed to fulfill order at factory', reportUrl: j.reportUrl });
+    try {
+      const order = await DB.addDinerOrder(req.user, orderReq);
+      const r = await fetch(`${config.factory.url}/api/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${config.factory.apiKey}` },
+        body: JSON.stringify({ diner: { id: req.user.id, name: req.user.name, email: req.user.email }, order }),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        const duration = Date.now() - start;
+        metrics.trackPizzaOrder(true, order.items.reduce((sum, item) => sum + item.price, 0));
+        metrics.requestTracker(req, res, duration);
+        res.send({ order, jwt: j.jwt, reportUrl: j.reportUrl });
+      } else {
+        metrics.trackPizzaOrder(false, 0);
+        res.status(500).send({ message: 'Failed to fulfill order at factory', reportUrl: j.reportUrl });
+      }
+    } catch (error) {
+      metrics.trackPizzaOrder(false, 0);
+      throw error;
     }
   })
 );

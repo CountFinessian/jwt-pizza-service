@@ -7,14 +7,9 @@ class Metrics {
     this.metricsBuffer = [];
   }
 
-  requestTracker(req, res, next) {
-    const start = Date.now();
-    res.on('finish', () => {
-      const duration = Date.now() - start;
-      this.metricsBuffer.push(`http_request_duration_seconds{method="${req.method}",status="${res.statusCode}"} ${duration / 1000}`);
-      this.metricsBuffer.push(`http_requests_total{method="${req.method}",status="${res.statusCode}"} 1`);
-    });
-    next();
+  requestTracker(req, res, duration) {
+    this.metricsBuffer.push(`http_request_duration_seconds{method="${req.method}",status="${res.statusCode}"} ${duration / 1000}`);
+    this.metricsBuffer.push(`http_requests_total{method="${req.method}",status="${res.statusCode}"} 1`);
   }
 
   trackAuthAttempt(success) {
