@@ -1,18 +1,3 @@
-# ⓼ Metrics: JWT Pizza Service
-
-🔑 **Key points**
-
-- Modify your CI pipeline to provide access to Grafana from the JWT Pizza Service.
-- Record specific metrics from the service.
-- Create a dashboard to visualize the metrics.
-- Use Curl to simulate real traffic.
-
----
-
-![course overview](../sharedImages/courseOverview.png)
-
-It is time to add metrics observability to the `jwt-pizza-service` code. In your fork of the Pizza Service code use what you learned about [Grafana metrics](../grafanaMetrics/grafanaMetrics.md) to create visualizations that demonstrate all of the following required metrics.
-
 ## Required metrics
 
 While this list specifies all of the required metrics, the images are just examples. You should explore the full function of Granfana visualizations and come up with something that exemplifies your personality. You should also feel free to add any other metrics that will increase your confidence in the system.
@@ -175,38 +160,9 @@ function sendMetricsPeriodically(period) {
 }
 ```
 
-### Simulating traffic
 
-You will need some traffic to your website in order to demonstrate that the visualizations are working. The easiest way to do this, is to follow the [Simulating traffic](../simulatingTraffic/simulatingTraffic.md) instruction.
 
-## ☑ Assignment
-
-In order to demonstrate your mastery of the concepts for this deliverable, complete the following.
+complete the following.
 
 1. Modify your fork of the `jwt-pizza-service` to generate the [required metrics](#required-metrics) and store them in your Grafana Cloud account.
 1. Create visualizations on your Grafana Cloud `Pizza Dashboard` to display all the required metrics.
-1. Export a copy of your dashboard and save it to your fork of the `jwt-pizza-service` repository in a directory named `grafana`.
-   1. On the Grafana Cloud console, navigate to your dashboard.
-   1. Press the `Share` button.
-   1. Press the `Export` tab and `Save to file`.
-   1. Name the file `grafana/deliverable8dashboard.json`
-1. Commit and push your changes so that they are running in your production environment.
-
-Once this is all working you should have something like this:
-
-![Metric dashboard](metricDashboard.png)
-
-Get the public URL for your dashboard and submit it to the Canvas assignment. This should look something like this:
-
-```txt
-https://youraccounthere.grafana.net/public-dashboards/29305se9fsacc66a21fa91899b75734
-```
-
-### Rubric
-
-| Percent | Item                                                                |
-| ------- | ------------------------------------------------------------------- |
-| 30%     | Storing all required metrics in Grafana Cloud Prometheus data store |
-| 70%     | Visualizing all required metrics in Grafana Cloud dashboard         |
-
-**Congratulations!** You have provided significant observability for your JWT Pizza Service. Time to go celebrate. I'm thinking tacos 🌮.
