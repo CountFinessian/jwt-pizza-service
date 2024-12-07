@@ -135,7 +135,7 @@ app.use('*', (req, res) => {
 });
 
 // Default error handler for all exceptions and errors.
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {  // Add underscore to indicate intentionally unused parameter
   // Log the error with wrapped logger
   logger.log('error', 'service', {
     error: err.message,
