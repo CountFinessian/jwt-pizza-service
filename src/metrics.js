@@ -1,6 +1,7 @@
 const os = require('os');
 const fetch = require('node-fetch');
 const config = require('./config.js');
+const logger = require('./logger.js');
 
 function getCpuUsagePercentage() {
   return new Promise((resolve) => {
@@ -37,160 +38,137 @@ function getMemoryUsagePercentage() {
 
 class Metrics {
   constructor() {
-    this.totalRequests = {
-      GET: 0,
-      POST: 0,
-      PUT: 0,
-      DELETE: 0,
-    };
-    this.activeUsers = 0;
-    this.authAttempts = {
-      successful: 0,
-      failed: 0,
-    };
-    this.pizzaOrders = {
-      successful: 0,
-      failed: 0,
-      revenue: 0,
-    };
-    this.pizzasSoldPerMinute = 0;
-    this.creationFailures = 0;
-    this.revenuePerMinute = 0;
-    this.totalRevenue = 0;
-    this.endpointLatencies = {};
-    this.pizzaCreationLatencies = [];
-    this.latencies = {};
-    this.counters = new Map();
-
-    // Send metrics to Grafana every 10 seconds
-    const timer = setInterval(async () => {
-      console.log('Sending metrics to Grafana...');
-      for (const [method, count] of Object.entries(this.totalRequests)) {
-        this.sendMetricToGrafana('request', method, 'total', count);
+    // Initialize counters
+    this.counters = {
+      requests: {
+        GET: 0,
+        POST: 0,
+        PUT: 0,
+        DELETE: 0,
+      },
+      users: {
+        active: 0,
+      },
+      auth: {
+        successful: 0,
+        failed: 0,
+      },
+      orders: {
+        successful: 0,
+        failed: 0,
+        revenue: 0,
       }
-      const cpuUsage = await getCpuUsagePercentage();
-      this.sendMetricToGrafana('system', 'cpu', 'usage', cpuUsage);
-      this.sendMetricToGrafana('system', 'memory', 'usage', getMemoryUsagePercentage());
-      this.sendMetricToGrafana('user', 'active_users', 'count', this.activeUsers);
-      this.sendMetricToGrafana('auth', 'successful_attempts', 'count', this.authAttempts.successful);
-      this.sendMetricToGrafana('auth', 'failed_attempts', 'count', this.authAttempts.failed);
-      this.sendMetricToGrafana('pizza', 'sold_per_minute', 'count', this.pizzasSoldPerMinute);
-      this.sendMetricToGrafana('pizza', 'revenue_per_minute', 'amount', this.revenuePerMinute);
-      this.sendMetricToGrafana('pizza', 'creation_failures', 'count', this.creationFailures);
+    };
 
-      // Add more granular pizza metrics
-      this.sendMetricToGrafana('pizza', 'orders_total', 'count', this.pizzaOrders.successful);
-      this.sendMetricToGrafana('pizza', 'revenue_total', 'amount', this.pizzaOrders.revenue);
-      this.sendMetricToGrafana('pizza', 'sold_per_minute', 'count', this.pizzasSoldPerMinute);
-      this.sendMetricToGrafana('pizza', 'revenue_per_minute', 'amount', this.revenuePerMinute);
-
-      // Reset per minute metrics
-      this.pizzasSoldPerMinute = 0;
-      this.revenuePerMinute = 0;
-    }, 10000); // Changed to 10 seconds for more frequent updates
-
-    timer.unref();
+    // Start metrics reporting
+    this.startMetricsReporting();
   }
 
+  startMetricsReporting() {
+    const reportInterval = setInterval(async () => {
+      try {
+        await this.reportMetrics();
+      } catch (error) {
+        logger.log('error', 'metrics', { 
+          error: error.message,
+          operation: 'reportMetrics'
+        });
+      }
+    }, 10000);
+    reportInterval.unref();
+  }
+
+  async reportMetrics() {
+    const metrics = [];
+    const timestamp = Date.now();
+
+    // System metrics
+    metrics.push(this.createMetric('system_cpu_usage', await getCpuUsagePercentage(), timestamp));
+    metrics.push(this.createMetric('system_memory_usage', getMemoryUsagePercentage(), timestamp));
+
+    // Request metrics
+    Object.entries(this.counters.requests).forEach(([method, count]) => {
+      metrics.push(this.createMetric(`http_requests_total{method="${method}"}`, count, timestamp));
+    });
+
+    // User metrics
+    metrics.push(this.createMetric('active_users', this.counters.users.active, timestamp));
+
+    // Auth metrics
+    metrics.push(this.createMetric('auth_attempts_successful', this.counters.auth.successful, timestamp));
+    metrics.push(this.createMetric('auth_attempts_failed', this.counters.auth.failed, timestamp));
+
+    // Order metrics
+    metrics.push(this.createMetric('orders_successful', this.counters.orders.successful, timestamp));
+    metrics.push(this.createMetric('orders_failed', this.counters.orders.failed, timestamp));
+    metrics.push(this.createMetric('orders_revenue', this.counters.orders.revenue, timestamp));
+
+    await this.sendMetricsToGrafana(metrics);
+  }
+
+  createMetric(name, value, timestamp) {
+    return {
+      name,
+      value: Number(value),
+      timestamp
+    };
+  }
+
+  async sendMetricsToGrafana(metrics) {
+    try {
+      const response = await fetch(config.metrics.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.metrics.userId}:${config.metrics.apiKey}`
+        },
+        body: JSON.stringify(metrics)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to send metrics: ${response.status}`);
+      }
+    } catch (error) {
+      logger.log('error', 'metrics', {
+        error: error.message,
+        operation: 'sendMetrics'
+      });
+    }
+  }
+
+  // Public API methods
   incrementRequests(method) {
-    if (this.totalRequests[method] !== undefined) {
-      this.totalRequests[method]++;
+    if (method in this.counters.requests) {
+      this.counters.requests[method]++;
     }
   }
 
   incrementActiveUsers() {
-    this.activeUsers++;
-    console.log(`Active users incremented: ${this.activeUsers}`);
+    this.counters.users.active++;
   }
 
   decrementActiveUsers() {
-    this.activeUsers--;
-    console.log(`Active users decremented: ${this.activeUsers}`);
+    this.counters.users.active = Math.max(0, this.counters.users.active - 1);
   }
 
-  incrementAuthAttempts(success) {
+  recordAuthAttempt(success) {
     if (success) {
-      this.authAttempts.successful++;
+      this.counters.auth.successful++;
     } else {
-      this.authAttempts.failed++;
+      this.counters.auth.failed++;
     }
   }
 
-  incrementPizzaOrders(success, revenue) {
+  recordOrder(success, revenue = 0) {
     if (success) {
-      this.pizzaOrders.successful++;
-      this.pizzaOrders.revenue += revenue;
-      this.pizzasSoldPerMinute++;
-      this.revenuePerMinute += revenue;
-      this.totalRevenue += revenue;
-      
-      // Send immediate metrics for successful orders
-      this.sendMetricToGrafana('pizza', 'orders', 'count', 1);
-      this.sendMetricToGrafana('pizza', 'revenue', 'amount', revenue);
-      this.sendMetricToGrafana('pizza', 'total_revenue', 'amount', this.totalRevenue);
+      this.counters.orders.successful++;
+      this.counters.orders.revenue += Number(revenue);
     } else {
-      this.pizzaOrders.failed++;
-      this.creationFailures++;
-      this.sendMetricToGrafana('pizza', 'failures', 'count', 1);
+      this.counters.orders.failed++;
     }
-    console.log(`Pizza orders updated: ${JSON.stringify(this.pizzaOrders)}`);
-  }
-
-  incrementRevenue(amount) {
-    this.totalRevenue += amount;
-    this.sendMetricToGrafana('revenue', 'total', 'amount', this.totalRevenue);
-    console.log(`Total revenue updated: ${this.totalRevenue}`);
-  }
-
-  trackLatency(endpoint, latency) {
-    if (!this.latencies[endpoint]) {
-      this.latencies[endpoint] = [];
-    }
-    this.latencies[endpoint].push(latency);
-    this.sendMetricToGrafana('latency', 'endpoint', endpoint, latency);
-    console.log(`Latency for ${endpoint}: ${latency}ms`);
-  }
-
-  trackPizzaCreationLatency(latency) {
-    this.pizzaCreationLatencies.push(latency);
-    this.sendMetricToGrafana('latency', 'pizza_creation', 'latency', latency);
-    console.log(`Pizza creation latency: ${latency}ms`);
-  }
-
-  increment(metricName, value = 1) {
-    try {
-      const currentValue = this.counters.get(metricName) || 0;
-      this.counters.set(metricName, currentValue + value);
-      this.sendMetricToGrafana('counter', metricName, 'value', currentValue + value);
-    } catch (error) {
-      console.error(`Error incrementing metric ${metricName}:`, error);
-    }
-  }
-
-  sendMetricToGrafana(metricPrefix, type, metricName, metricValue) {
-    const metric = `${metricPrefix},source=${config.metrics.source},type=${type} ${metricName}=${metricValue}`;
-    const url = new URL(config.metrics.url); // Ensure the URL is absolute
-    console.log(`Pushing metrics to URL: ${url.href}`); // Log the URL being used
-    fetch(url.href, {
-      method: 'post',
-      body: metric,
-      headers: {
-        'Content-Type': 'text/plain', // Ensure the content type is set correctly
-        Authorization: `Bearer ${config.metrics.userId}:${config.metrics.apiKey}`,
-      },
-    })
-      .then((response) => {
-        if (!response.ok) {
-          console.error('Failed to push metrics data to Grafana');
-        } else {
-          console.log(`Pushed ${metric}`);
-        }
-      })
-      .catch((error) => {
-        console.error('Error pushing metrics:', error);
-      });
   }
 }
 
+// Export a singleton instance
 const metrics = new Metrics();
-module.exports = metrics;  // Export the metrics instance directly
+module.exports = metrics;
