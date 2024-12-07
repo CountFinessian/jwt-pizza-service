@@ -1,5 +1,12 @@
-const PizzaLogger = require('pizza-logger');
 const config = require('./config.js');
+
+// Define default config
+const DEFAULT_CONFIG = {
+  source: 'jwt-pizza-service',
+  url: 'http://localhost:3000',
+  userId: '',
+  apiKey: ''
+};
 
 class Logger {
   constructor() {
@@ -107,7 +114,7 @@ class Logger {
         operation: this.getOperationType(req)
       });
 
-      res.end = function(chunk, encoding) {
+      res.end = function(chunk) {  // Remove unused 'encoding' parameter
         try {
           const body = chunk ? chunk.toString() : '';
           const logData = self.createLogData(req, res, body);

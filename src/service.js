@@ -66,14 +66,13 @@ app.use((req, res, next) => {
 });
 
 // Middleware to track auth attempts
-app.use('/api/auth', (req, res, next) => {
+app.use('/api/auth', (req, res) => {  // Remove unused 'next' parameter
   res.on('finish', () => {
     if (req.method === 'PUT' || req.method === 'POST') {
       const success = res.statusCode === 200;
       metrics.incrementAuthAttempts(success);
     }
   });
-  next();
 });
 
 // Middleware to track latency for service endpoints
