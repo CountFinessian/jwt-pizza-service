@@ -57,11 +57,25 @@ async function setAuthUser(req, res, next) {
 }
 
 // Authenticate token
-authRouter.authenticateToken = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).send({ message: 'unauthorized' });
+authRouter.authenticateToken = function (req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    logger.log('error', 'auth', { error: 'No token provided' });
+    return res.status(401).json({ message: 'Token verification failed: jwt must be provided' });
   }
-  next();
+
+  jwt.verify(token, config.jwtSecret, (err, user) => {
+    if (err) {
+      logger.log('error', 'auth', { error: err.message });
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    req.user.isRole = (role) => !!req.user.roles.find((r) => r.role === role);
+    logger.log('info', 'auth', { userId: user.id });
+    next();
+  });
 };
 
 // register
@@ -70,11 +84,12 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
+      logger.log('warn', 'auth', { error: 'Missing required fields' });
       return res.status(400).json({ message: 'name, email, and password are required' });
     }
     const user = await DB.addUser({ name, email, password, roles: [{ role: Role.Diner }] });
     const auth = await setAuth(user);
-    logger.authLogger({ action: 'register', user });
+    logger.log('info', 'auth', { action: 'register', userId: user.id });
     res.json({ user: user, token: auth });
   })
 );
@@ -86,7 +101,7 @@ authRouter.put(
     const { email, password } = req.body;
     const user = await DB.getUser(email, password);
     const auth = await setAuth(user);
-    logger.authLogger({ action: 'login', user });
+    logger.log('info', 'auth', { action: 'login', userId: user.id });
     res.json({ user: user, token: auth });
   })
 );
@@ -97,7 +112,7 @@ authRouter.delete(
   authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
     await clearAuth(req);
-    logger.authLogger({ action: 'logout', user: req.user });
+    logger.log('info', 'auth', { action: 'logout', userId: req.user.id });
     res.json({ message: 'logout successful' });
   })
 );
@@ -111,11 +126,12 @@ authRouter.put(
     const userId = Number(req.params.userId);
     const user = req.user;
     if (user.id !== userId && !user.isRole(Role.Admin)) {
+      logger.log('warn', 'auth', { error: 'unauthorized access attempt', userId: user.id });
       return res.status(403).json({ message: 'unauthorized' });
     }
 
     const updatedUser = await DB.updateUser(userId, email, password);
-    logger.authLogger({ action: 'update', user: updatedUser });
+    logger.log('info', 'auth', { action: 'update', userId: updatedUser.id });
     res.json(updatedUser);
   })
 );

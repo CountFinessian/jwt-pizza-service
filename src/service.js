@@ -1,11 +1,12 @@
 const express = require('express');
-const { authRouter } = require('./routes/authRouter.js'); // Remove setAuthUser import
+const { authRouter } = require('./routes/authRouter.js'); // Import verifyToken
 const orderRouter = require('./routes/orderRouter.js');
 const franchiseRouter = require('./routes/franchiseRouter.js');
 const version = require('./version.json');
 const config = require('./config.js');
 const metrics = require('./metrics.js'); // Add metrics module
 const logger = require('./logger');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(express.json());
@@ -15,12 +16,15 @@ app.use(logger.httpLogger);
 app.use((req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader) {
-    const token = authHeader.split(' ')[1];
-    // Assuming a function verifyToken exists to verify JWT token
-    const user = verifyToken(token);
-    if (user) {
-      req.user = user;
-      console.log('User authenticated:', user); // Log authenticated user
+    try {
+      const token = authHeader.split(' ')[1];
+      const user = jwt.verify(token, config.jwtSecret);
+      if (user) {
+        req.user = user;
+        console.log('User authenticated:', user);
+      }
+    } catch (err) {
+      console.error('Token verification failed:', err.message);
     }
   }
   next();
@@ -102,35 +106,11 @@ apiRouter.use('/franchise', franchiseRouter);
 
 // Add /api/metrics endpoint
 apiRouter.post('/metrics', (req, res) => {
-  const { metric, value, success, revenue } = req.body;
-  switch (metric) {
-    case 'menu_request':
-      // Handle menu request metric
-      break;
-    case 'auth_attempt':
-      metrics.incrementAuthAttempts(success);
-      break;
-    case 'pizza_order':
-      metrics.incrementPizzaOrders(success, revenue);
-      break;
-    case 'logout':
-      // Handle logout metric
-      break;
-    default:
-      console.log(`Unknown metric: ${metric}`);
+  const { metric, success, revenue } = req.body;
+  if (metric === 'pizza_order') {
+    metrics.incrementPizzaOrders(success, revenue);
   }
   res.status(200).send();
-});
-
-// Add /api/metrics/revenue endpoint
-apiRouter.post('/metrics/revenue', (req, res) => {
-  const { revenue } = req.body;
-  if (typeof revenue === 'number') {
-    metrics.incrementRevenue(revenue);
-    res.status(200).send();
-  } else {
-    res.status(400).send({ message: 'Invalid revenue value' });
-  }
 });
 
 apiRouter.use('/docs', (req, res) => {
@@ -156,8 +136,21 @@ app.use('*', (req, res) => {
 
 // Default error handler for all exceptions and errors.
 app.use((err, req, res, next) => {
-  res.status(err.statusCode ?? 500).json({ message: err.message, stack: err.stack });
-  next();
+  // Log the error with wrapped logger
+  logger.log('error', 'service', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    body: req.body,
+    source: 'jwt-pizza-service'
+  });
+
+  // Send appropriate response
+  res.status(err.statusCode || err.status || 500).json({ 
+    message: err.message || 'Internal server error',
+    status: err.statusCode || err.status || 500
+  });
 });
 
 module.exports = app;

@@ -4,9 +4,11 @@ const config = require('../config.js');
 const { StatusCodeError } = require('../endpointHelper.js');
 const { Role } = require('../model/model.js');
 const dbModel = require('./dbModel.js');
+const logger = require('../logger.js');
+
 class DB {
   constructor() {
-    this.initialized = this.initializeDatabase();
+    this.initPromise = this.initializeDatabase();
   }
 
   async getMenu() {
@@ -160,23 +162,30 @@ class DB {
   async createFranchise(franchise) {
     const connection = await this.getConnection();
     try {
-      for (const admin of franchise.admins) {
-        const adminUser = await this.query(connection, `SELECT id, name FROM user WHERE email=?`, [admin.email]);
-        if (adminUser.length == 0) {
-          throw new StatusCodeError(`unknown user for franchise admin ${admin.email} provided`, 404);
+      await connection.beginTransaction();
+      try {
+        for (const admin of franchise.admins) {
+          const adminUser = await this.query(connection, `SELECT id, name FROM user WHERE email=?`, [admin.email]);
+          if (adminUser.length == 0) {
+            throw new StatusCodeError(`Unknown user for franchise admin ${admin.email}`, 404);
+          }
+          admin.id = adminUser[0].id;
+          admin.name = adminUser[0].name;
         }
-        admin.id = adminUser[0].id;
-        admin.name = adminUser[0].name;
+
+        const franchiseResult = await this.query(connection, `INSERT INTO franchise (name) VALUES (?)`, [franchise.name]);
+        franchise.id = franchiseResult.insertId;
+
+        for (const admin of franchise.admins) {
+          await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [admin.id, Role.Franchisee, franchise.id]);
+        }
+
+        await connection.commit();
+        return franchise;
+      } catch (error) {
+        await connection.rollback();
+        throw error;
       }
-
-      const franchiseResult = await this.query(connection, `INSERT INTO franchise (name) VALUES (?)`, [franchise.name]);
-      franchise.id = franchiseResult.insertId;
-
-      for (const admin of franchise.admins) {
-        await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [admin.id, Role.Franchisee, franchise.id]);
-      }
-
-      return franchise;
     } finally {
       connection.end();
     }
@@ -285,8 +294,47 @@ class DB {
   }
 
   async query(connection, sql, params) {
-    const [results] = await connection.execute(sql, params);
-    return results;
+    try {
+      logger.log('debug', 'db', { 
+        sql: this.sanitizeSQL(sql),
+        params: this.sanitizeParams(params),
+        timestamp: new Date().toISOString()
+      });
+      const [results] = await connection.execute(sql, params);
+      return results;
+    } catch (error) {
+      logger.log('error', 'db', {
+        sql: this.sanitizeSQL(sql),
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+
+      // Handle specific MySQL errors
+      if (error.code === 'ER_DUP_ENTRY') {
+        throw new StatusCodeError('This item already exists', 409);
+      }
+      if (error.code === 'ER_NO_REFERENCED_ROW' || error.code === 'ER_NO_REFERENCED_ROW_2') {
+        throw new StatusCodeError('Referenced item does not exist', 404);
+      }
+      if (error.code === 'ER_ROW_IS_REFERENCED' || error.code === 'ER_ROW_IS_REFERENCED_2') {
+        throw new StatusCodeError('Cannot delete or update a parent row: a foreign key constraint fails', 409);
+      }
+
+      throw new StatusCodeError(error.message, 500);
+    }
+  }
+
+  sanitizeSQL(sql) {
+    return sql.replace(/password\s*=\s*['"][^'"]*['"]/gi, "password='*****'");
+  }
+
+  sanitizeParams(params) {
+    if (!params) return params;
+    return params.map(param => 
+      typeof param === 'string' && param.toLowerCase().includes('password') 
+        ? '*****' 
+        : param
+    );
   }
 
   async getID(connection, key, value, table) {
@@ -298,9 +346,17 @@ class DB {
   }
 
   async getConnection() {
-    // Make sure the database is initialized before trying to get a connection.
-    await this.initialized;
-    return this._getConnection();
+    try {
+      // Wait for initialization to complete before getting connection
+      await this.initPromise;
+      return this._getConnection();
+    } catch (err) {
+      logger.log('error', 'db', { 
+        error: err.message,
+        operation: 'getConnection'
+      });
+      throw new StatusCodeError('Database connection failed', 500);
+    }
   }
 
   async _getConnection(setUse = true) {
@@ -329,21 +385,30 @@ class DB {
 
         if (!dbExists) {
           console.log('Successfully created database');
-        }
-
-        for (const statement of dbModel.tableCreateStatements) {
-          await connection.query(statement);
-        }
-
-        if (!dbExists) {
-          const defaultAdmin = { name: '常用名字', email: 'a@jwt.com', password: 'admin', roles: [{ role: Role.Admin }] };
-          this.addUser(defaultAdmin);
+          for (const statement of dbModel.tableCreateStatements) {
+            await connection.query(statement);
+          }
+          const defaultAdmin = { 
+            name: '常用名字', 
+            email: 'a@jwt.com', 
+            password: 'admin', 
+            roles: [{ role: Role.Admin }] 
+          };
+          await this.addUser(defaultAdmin);
         }
       } finally {
         connection.end();
       }
     } catch (err) {
-      console.error(JSON.stringify({ message: 'Error initializing database', exception: err.message, connection: config.db.connection }));
+      logger.log('error', 'db', {
+        message: 'Error initializing database',
+        error: err.message,
+        config: {
+          host: config.db.connection.host,
+          database: config.db.connection.database
+        }
+      });
+      throw err;
     }
   }
 

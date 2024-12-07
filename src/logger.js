@@ -1,91 +1,153 @@
-const fetch = require('node-fetch');
+const PizzaLogger = require('pizza-logger');
 const config = require('./config.js');
 
 class Logger {
-  httpLogger = (req, res, next) => {
-    const originalSend = res.send;
-    res.send = (body) => {
-      const logData = {
-        authorized: !!req.headers.authorization,
-        path: req.originalUrl,
-        method: req.method,
-        statusCode: res.statusCode,
-        reqBody: this.sanitize(req.body),
-        resBody: this.sanitize(body)
-      };
-      const level = this.getLogLevel(res.statusCode);
-      this.log(level, 'http', logData);
-      res.send = originalSend;
-      return res.send(body);
+  constructor() {
+    // Initialize with logging config from config.js
+    this.config = config.logging;
+    // Bind methods to preserve context
+    this.httpLogger = this.httpLogger.bind(this);
+    this.log = this.log.bind(this);
+    this.createLogData = this.createLogData.bind(this);
+  }
+
+  // Add createLogData as a class method
+  createLogData(req, res, body) {
+    return {
+      source: this.config.source,
+      authorized: !!req.headers.authorization,
+      path: req.originalUrl,
+      method: req.method,
+      statusCode: res.statusCode,
+      operation: this.getOperationType(req),
+      reqBody: typeof req.body === 'string' ? req.body : JSON.stringify(req.body),
+      resBody: typeof body === 'string' ? body : JSON.stringify(body),
+      timestamp: new Date().toISOString()
     };
-    next();
-  };
-
-  dbLogger(query) {
-    const logData = { query: this.sanitize(query) };
-    this.log('info', 'db', logData);
   }
 
-  factoryLogger(requestData) {
-    const logData = this.sanitize(requestData);
-    this.log('info', 'factory', logData);
+  getOperationType(req) {
+    const method = req.method.toLowerCase();
+    switch (method) {
+      case 'get': return 'read';
+      case 'post': return 'create';
+      case 'put': return 'update';
+      case 'delete': return 'delete';
+      default: return method;
+    }
   }
 
-  unhandledErrorLogger(error) {
-    const logData = {
-      message: error.message,
-      stack: error.stack,
-      code: error.code || 500
-    };
-    this.log('error', 'exception', logData);
-  }
-
-  log(level, type, logData) {
-    const labels = { component: config.logging.source, level: level, type: type };
-    const values = [[this.getCurrentTime(), JSON.stringify(logData)]];
-    const logEvent = { streams: [{ stream: labels, values: values }] };
-    this.sendLogToGrafana(logEvent);
-  }
-
-  getLogLevel(statusCode) {
+  statusToLogLevel(statusCode) {
     if (statusCode >= 500) return 'error';
     if (statusCode >= 400) return 'warn';
     return 'info';
   }
 
-  getCurrentTime() {
-    return (Date.now() * 1e6).toString();
+  nowString() {
+    return (Math.floor(Date.now()) * 1000000).toString();
   }
 
-  sanitize(data) {
-    const dataStr = JSON.stringify(data);
-    return dataStr
-      .replace(/"password":\s*"[^"]*"/g, '"password":"*****"')
-      .replace(/"apiKey":\s*"[^"]*"/g, '"apiKey":"*****"')
-      .replace(/"authorization":\s*"[^"]*"/g, '"authorization":"*****"')
-      .replace(/"token":\s*"[^"]*"/g, '"token":"*****"');
+  sanitize(logData) {
+    if (!logData) return logData;
+    const sanitized = JSON.stringify(logData);
+    return sanitized.replace(/\\"password\\":\s*\\"[^"]*\\"/g, '\\"password\\": \\"*****\\"');
   }
 
-  sendLogToGrafana(event) {
-    const body = JSON.stringify(event);
-    fetch(`${config.logging.url}`, {
-      method: 'post',
-      body: body,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.logging.userId}:${config.logging.apiKey}`
+  async sendLogToGrafana(event) {
+    try {
+      const response = await fetch(this.config.url, {
+        method: 'POST',
+        body: JSON.stringify(event),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.userId}:${this.config.apiKey}`
+        }
+      });
+      if (!response.ok) {
+        console.error('Failed to send log to Grafana:', await response.text());
       }
-    }).then(res => {
-      if (!res.ok) console.log('Failed to send log to Grafana');
-    }).catch(err => {
+    } catch (err) {
       console.error('Error sending log to Grafana:', err);
-    });
+    }
+  }
+
+  log(level, type, data) {
+    const labels = { 
+      component: this.config.source, 
+      level, 
+      type 
+    };
+    const values = [this.nowString(), this.sanitize(data)];
+    const logEvent = { 
+      streams: [{ 
+        stream: labels, 
+        values: [values] 
+      }]
+    };
+
+    this.sendLogToGrafana(logEvent);
+  }
+
+  configure(config) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  httpLogger(req, res, next) {
+    try {
+      const oldEnd = res.end;
+      const oldSend = res.send;
+      const oldJson = res.json;
+      const self = this;
+
+      // Log request start
+      this.log('info', 'http', {
+        event: 'request_start',
+        path: req.originalUrl,
+        method: req.method,
+        operation: this.getOperationType(req)
+      });
+
+      res.end = function(chunk, encoding) {
+        try {
+          const body = chunk ? chunk.toString() : '';
+          const logData = self.createLogData(req, res, body);
+          const level = self.statusToLogLevel(res.statusCode);
+          self.log(level, 'http', { ...logData, event: 'request_end' });
+        } catch (err) {
+          console.error('Logging error in end:', err);
+        }
+        return oldEnd.apply(this, arguments);
+      };
+
+      res.send = function(body) {
+        try {
+          const logData = self.createLogData(req, res, body);
+          const level = self.statusToLogLevel(res.statusCode);
+          self.log(level, 'http', logData);
+        } catch (err) {
+          console.error('Logging error in send:', err);
+        }
+        return oldSend.apply(this, arguments);
+      };
+
+      res.json = function(body) {
+        try {
+          const logData = self.createLogData(req, res, body);
+          const level = self.statusToLogLevel(res.statusCode);
+          self.log(level, 'http', logData);
+        } catch (err) {
+          console.error('Logging error in json:', err);
+        }
+        return oldJson.apply(this, arguments);
+      };
+
+      next();
+    } catch (err) {
+      console.error('Error in httpLogger:', err);
+      next(err);
+    }
   }
 }
 
-function metricsLogger(metrics) {
-  console.log('[METRICS]', JSON.stringify(metrics, null, 2));
-}
-
-module.exports = new Logger();
-module.exports.metricsLogger = metricsLogger;
+const logger = new Logger();
+module.exports = logger;

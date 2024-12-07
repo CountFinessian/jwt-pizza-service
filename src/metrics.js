@@ -60,6 +60,7 @@ class Metrics {
     this.endpointLatencies = {};
     this.pizzaCreationLatencies = [];
     this.latencies = {};
+    this.counters = new Map();
 
     // Send metrics to Grafana every 10 seconds
     const timer = setInterval(async () => {
@@ -77,10 +78,16 @@ class Metrics {
       this.sendMetricToGrafana('pizza', 'revenue_per_minute', 'amount', this.revenuePerMinute);
       this.sendMetricToGrafana('pizza', 'creation_failures', 'count', this.creationFailures);
 
+      // Add more granular pizza metrics
+      this.sendMetricToGrafana('pizza', 'orders_total', 'count', this.pizzaOrders.successful);
+      this.sendMetricToGrafana('pizza', 'revenue_total', 'amount', this.pizzaOrders.revenue);
+      this.sendMetricToGrafana('pizza', 'sold_per_minute', 'count', this.pizzasSoldPerMinute);
+      this.sendMetricToGrafana('pizza', 'revenue_per_minute', 'amount', this.revenuePerMinute);
+
       // Reset per minute metrics
       this.pizzasSoldPerMinute = 0;
       this.revenuePerMinute = 0;
-    }, 60000); // Every 60 seconds
+    }, 10000); // Changed to 10 seconds for more frequent updates
 
     timer.unref();
   }
@@ -116,9 +123,15 @@ class Metrics {
       this.pizzasSoldPerMinute++;
       this.revenuePerMinute += revenue;
       this.totalRevenue += revenue;
+      
+      // Send immediate metrics for successful orders
+      this.sendMetricToGrafana('pizza', 'orders', 'count', 1);
+      this.sendMetricToGrafana('pizza', 'revenue', 'amount', revenue);
+      this.sendMetricToGrafana('pizza', 'total_revenue', 'amount', this.totalRevenue);
     } else {
       this.pizzaOrders.failed++;
       this.creationFailures++;
+      this.sendMetricToGrafana('pizza', 'failures', 'count', 1);
     }
     console.log(`Pizza orders updated: ${JSON.stringify(this.pizzaOrders)}`);
   }
@@ -142,6 +155,16 @@ class Metrics {
     this.pizzaCreationLatencies.push(latency);
     this.sendMetricToGrafana('latency', 'pizza_creation', 'latency', latency);
     console.log(`Pizza creation latency: ${latency}ms`);
+  }
+
+  increment(metricName, value = 1) {
+    try {
+      const currentValue = this.counters.get(metricName) || 0;
+      this.counters.set(metricName, currentValue + value);
+      this.sendMetricToGrafana('counter', metricName, 'value', currentValue + value);
+    } catch (error) {
+      console.error(`Error incrementing metric ${metricName}:`, error);
+    }
   }
 
   sendMetricToGrafana(metricPrefix, type, metricName, metricValue) {
@@ -170,4 +193,4 @@ class Metrics {
 }
 
 const metrics = new Metrics();
-module.exports = metrics;
+module.exports = metrics;  // Export the metrics instance directly

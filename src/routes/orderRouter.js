@@ -3,8 +3,21 @@ const config = require('../config.js');
 const { Role, DB } = require('../database/database.js');
 const { authRouter } = require('./authRouter.js');
 const { asyncHandler, StatusCodeError } = require('../endpointHelper.js');
+const metrics = require('../metrics.js');
+const logger = require('../logger.js');
 
 const orderRouter = express.Router();
+
+// Add JSON parsing error handler
+orderRouter.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ 
+      message: 'Invalid JSON format in request body',
+      details: err.message
+    });
+  }
+  next(err);
+});
 
 orderRouter.endpoints = [
   {
@@ -44,7 +57,13 @@ orderRouter.endpoints = [
 orderRouter.get(
   '/menu',
   asyncHandler(async (req, res) => {
-    res.send(await DB.getMenu());
+    try {
+      const menu = await DB.getMenu();
+      res.type('application/json').send(JSON.stringify(menu, null, 2));
+    } catch (err) {
+      logger.log('error', 'menu', { error: err.message });
+      throw new StatusCodeError('Failed to retrieve menu', 500);
+    }
   })
 );
 
@@ -77,20 +96,87 @@ orderRouter.post(
   '/',
   authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
+    // Validate request body exists
+    if (!req.body || Object.keys(req.body).length === 0) {
+      throw new StatusCodeError('Request body is empty or invalid', 400);
+    }
+
     const orderReq = req.body;
+
+    // More specific validation messages
+    if (!orderReq.franchiseId) {
+      throw new StatusCodeError('franchiseId is required', 400);
+    }
+    if (!orderReq.storeId) {
+      throw new StatusCodeError('storeId is required', 400);
+    }
+    if (!Array.isArray(orderReq.items) || orderReq.items.length === 0) {
+      throw new StatusCodeError('items must be a non-empty array', 400);
+    }
+
+    // Validate each item in the order
+    for (const item of orderReq.items) {
+      if (!item.menuId || !item.description || typeof item.price !== 'number') {
+        throw new StatusCodeError('Each item must have menuId, description, and valid price', 400);
+      }
+    }
+
     const order = await DB.addDinerOrder(req.user, orderReq);
-    const r = await fetch(`${config.factory.url}/api/order`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${config.factory.apiKey}` },
-      body: JSON.stringify({ diner: { id: req.user.id, name: req.user.name, email: req.user.email }, order }),
-    });
-    const j = await r.json();
-    if (r.ok) {
-      res.send({ order, jwt: j.jwt, reportUrl: j.reportUrl });
-    } else {
-      res.status(500).send({ message: 'Failed to fulfill order at factory', reportUrl: j.reportUrl });
+    // Calculate total revenue - ensure we're using decimal arithmetic
+    const revenue = order.items.reduce((total, item) => total + Number(parseFloat(item.price)), 0);
+
+    try {
+      const requestBody = { diner: { id: req.user.id, name: req.user.name, email: req.user.email }, order };
+      const r = await fetch(`${config.factory.url}/api/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${config.factory.apiKey}` },
+        body: JSON.stringify(requestBody)
+      });
+      
+      const responseBody = await r.json();
+      logger.log('info', 'factory', requestBody);
+
+      if (r.ok) {
+        // Track successful orders with revenue
+        metrics.increment('orders.success', 1);
+        metrics.increment('orders.revenue', revenue);
+        logger.log('info', 'order', { 
+          status: 'success', 
+          orderId: order.id,
+          revenue: revenue,
+          items: order.items.length 
+        });
+        res.send({ order, jwt: responseBody.jwt, reportUrl: responseBody.reportUrl });
+      } else {
+        // Track failed orders
+        metrics.increment('orders.failed', 1);
+        throw new StatusCodeError(responseBody.message || 'Failed to fulfill order at factory', r.status);
+      }
+    } catch (error) {
+      logger.log('error', 'order', { error: error.message, order });
+      metrics.increment('orders.failed', 1);
+      throw error;
     }
   })
 );
+
+// Add error handling middleware at the end
+orderRouter.use((err, req, res, next) => {
+  // Only handle JSON parsing errors here
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    logger.log('warn', 'json-parse', { 
+      error: err.message,
+      path: req.path,
+      method: req.method 
+    });
+    return res.status(400).json({ 
+      message: 'Invalid JSON format in request body',
+      details: err.message
+    });
+  }
+
+  // Pass other errors to main error handler
+  next(err);
+});
 
 module.exports = orderRouter;
