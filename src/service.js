@@ -135,6 +135,7 @@ app.use('*', (req, res) => {
 });
 
 // Default error handler for all exceptions and errors.
+// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {  // Add underscore to indicate intentionally unused parameter
   // Log the error with wrapped logger
   logger.log('error', 'service', {
