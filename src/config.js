@@ -4,7 +4,7 @@ module.exports = {
     connection: {      
       host: '127.0.0.1',
       user: 'root',
-      password: 'BYUSparks:Customary6',
+      password: 'tempdbpassword',
       database: 'pizza',
       connectTimeout: 60000,
     },
